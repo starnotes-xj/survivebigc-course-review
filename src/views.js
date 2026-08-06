@@ -409,6 +409,15 @@ export function renderCourseDetail(course, teacher, session, activeTeacherId = 0
   <div class="teachers">${tabs}</div>
 </div>
 
+<h3 class="sec">添加老师</h3>
+<form class="paper" method="post" action="/courses/${course.id}/teachers" style="display:flex;gap:10px;align-items:flex-end">
+  <div style="flex:1">
+    <label class="f">老师姓名(本课还有别的老师? 填上即可)</label>
+    <input type="text" name="teacher_name" required placeholder="如: 钱老师">
+  </div>
+  <button class="btn ink" type="submit" style="margin-bottom:2px">添 加</button>
+</form>
+
 <h3 class="sec">${escapeHtml(teacher.teacher_name)} · 授课评价</h3>
 <p class="meta" style="font-size:13px;color:var(--ink-dim);margin-bottom:14px">
   综合评分 ${stars(teacher.avg_rating)} ${teacher.avg_rating || "-"} / 5 · ${teacher.reviews.length} 条评价
@@ -524,11 +533,11 @@ ${reviews}
   return page(`老师 - ${teacher.name}`, body, session);
 }
 
-/** 通用错误页 */
-export function renderError(msg, session) {
+/** 通用错误页; 若 msg 已含安全 HTML(如链接)可传 htmlMsg=true */
+export function renderError(msg, session, htmlMsg = false) {
   return page(
     "出错了",
-    `<div class="err"><strong>✕ 出错了</strong> — ${escapeHtml(msg)}</div><p><a class="btn ghost" href="/courses">← 返回课程列表</a></p>`,
+    `<div class="err"><strong>✕ 出错了</strong> — ${htmlMsg ? msg : escapeHtml(msg)}</div><p><a class="btn ghost" href="/courses">← 返回课程列表</a></p>`,
     session
   );
 }

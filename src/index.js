@@ -111,12 +111,33 @@ async function route(request, env, ctx) {
       }
       const created = await db.createCourse(env, { name, teachers, description });
       if (!created) {
+        const existing = await env.DB.prepare(
+          "SELECT id FROM courses WHERE name = ?"
+        ).bind(name).first();
+        const link = existing
+          ? ` <a href="/courses/${existing.id}" style="color:var(--red)">前往该课程添加老师 →</a>`
+          : "";
         return html(
-          views.renderError(`「${name}」这门课已经存在, 直接去查看/评价即可, 无需重复添加。`, session),
+          views.renderError(
+            `「${name}」这门课已经存在, 无需重复添加。${link}`,
+            session,
+            true
+          ),
           400
         );
       }
       return redirect("/courses", url);
+    }
+
+    // 给已有课程添加老师
+    const teacherAddMatch = path.match(/^\/courses\/(\d+)\/teachers$/);
+    if (teacherAddMatch && request.method === "POST") {
+      const form = await request.formData();
+      const teacherName = String(form.get("teacher_name") || "").trim();
+      if (!teacherName) return html(views.renderError("老师姓名不能为空", session), 400);
+      const result = await db.addCourseTeacher(env, Number(teacherAddMatch[1]), teacherName);
+      if (!result) return html(views.renderError("课程不存在"), 404);
+      return redirect(`/courses/${teacherAddMatch[1]}?teacher=${result.teacherId}`, url);
     }
 
     // 课程详情 / 提交评价

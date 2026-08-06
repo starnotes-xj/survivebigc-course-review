@@ -47,11 +47,10 @@ export async function listCourses(env, q = "") {
   return env.DB.prepare(
     `SELECT c.id, c.name, c.description,
             COUNT(DISTINCT ct.teacher_id) AS teacher_count,
-            COUNT(r.id) AS review_count,
-            ROUND(AVG(r.rating), 1) AS avg_rating
+            (SELECT COUNT(*) FROM reviews r WHERE r.course_id = c.id) AS review_count,
+            (SELECT ROUND(AVG(rating), 1) FROM reviews r WHERE r.course_id = c.id) AS avg_rating
      FROM courses c
      LEFT JOIN course_teachers ct ON ct.course_id = c.id
-     LEFT JOIN reviews r ON r.course_id = c.id
      WHERE (? = '' OR c.name LIKE '%' || ? || '%')
      GROUP BY c.id
      ORDER BY c.id DESC`
@@ -129,7 +128,9 @@ export async function listTeachers(env, q = "") {
 /** 老师详情: 教的课程(各带评分) + 全部评价(带课程名) */
 export async function getTeacher(env, id) {
   const teacher = await env.DB.prepare(
-    "SELECT id, name, created_at FROM teachers WHERE id = ?"
+    `SELECT t.id, t.name, t.created_at,
+            (SELECT ROUND(AVG(rating), 1) FROM reviews r WHERE r.teacher_id = t.id) AS avg_rating
+     FROM teachers t WHERE t.id = ?`
   ).bind(id).first();
   if (!teacher) return null;
   const courses = await env.DB.prepare(
@@ -184,6 +185,22 @@ export async function createCourse(env, { name, teachers = [], description = "" 
   }
   if (stmts.length) await env.DB.batch(stmts);
   return { id: courseId };
+}
+
+/** 给已有课程添加老师(老师不存在则自动创建) */
+export async function addCourseTeacher(env, courseId, name) {
+  const tname = String(name || "").trim();
+  if (!tname) return null;
+  const course = await env.DB.prepare(
+    "SELECT id FROM courses WHERE id = ?"
+  ).bind(courseId).first();
+  if (!course) return null;
+  await env.DB.prepare("INSERT OR IGNORE INTO teachers (name) VALUES (?)").bind(tname).run();
+  const t = await env.DB.prepare("SELECT id FROM teachers WHERE name = ?").bind(tname).first();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO course_teachers (course_id, teacher_id) VALUES (?, ?)"
+  ).bind(courseId, t.id).run();
+  return { teacherId: t.id };
 }
 
 /** 提交评价(针对某课程某老师) */

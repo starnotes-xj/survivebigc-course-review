@@ -1,0 +1,25 @@
+# Cloudflare Workers 配置
+# 部署前必做:
+#   1. wrangler d1 create course-review   -> 把返回的 database_id 填到下面
+#   2. wrangler d1 execute course-review --file=schema.sql  -> 建表
+name = "survivebigc-course-review"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# 服务公开地址(部署后你的 Worker 域名, 不带末尾斜杠)
+# 例: https://survivebigc-course-review.xxx.workers.dev 或自定义域名
+PUBLIC_BASE_URL = "https://eval.survival.bigcctf.cn"
+# 登录模式: password = 后端代登录(学号密码, 无需注册) | cas = 浏览器跳转统一认证(需学校注册) | public = 公开浏览
+LOGIN_MODE = "password"
+# 身份判定规则(逗号分隔的 containerId 子串,命中任一即视为学生)
+# 实测:本科生 containerId = "ou=bzks,ou=People"
+# 若研究生/其他类型也要放行,把对应的 OU 缩写加进来(如 yjs)
+STUDENT_CONTAINER_PATTERNS = "bzks"
+# 登录会话有效期(秒,默认 30 天)
+SESSION_TTL = "2592000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "course-review"
+database_id = "044517b0-499d-4daa-afe9-fb72882dd139"

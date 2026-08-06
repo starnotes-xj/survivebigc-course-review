@@ -1,0 +1,14 @@
+{
+  "name": "survivebigc-course-review",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "北印课程评价系统 - Cloudflare Workers + D1,基于学校统一认证(CAS)鉴权,仅学生可访问",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute course-review --file=schema.sql",
+    "db:seed": "wrangler d1 execute course-review --file=seed.sql"
+  },
+  "dependencies": {}
+}

@@ -1,18 +1,38 @@
 # 北印课程评价系统 (survivebigc-course-review)
 
 基于 Cloudflare Workers + D1 的课程评价系统。**仅在校学生可访问**:
-通过学校统一认证平台(CAS)登录, 后端调 `serviceValidate` 判定身份,
-非学生身份(教师/其他)一律返回 403。
+学生可查看/提交课程评价, 教师/其他身份一律 403。
+
+登录支持两种模式(`wrangler.toml` 的 `LOGIN_MODE` 配置):
+
+| 模式 | 说明 | 适用场景 |
+|---|---|---|
+| `password`(当前) | **后端代登录**: 页面提交学号+密码, 后端模拟登录学校统一认证, 密码只在本请求内存中使用、不落盘 | authserver 未注册本应用时 |
+| `cas` | 浏览器 302 跳转学校统一认证, 回调带 ticket 验证 | authserver 已注册本应用时 |
 
 ## 技术方案(已实测验证)
 
-- 登录: 302 跳转 `authserver.bigc.edu.cn/authserver/login?service=<回调地址>`
-- 验证: 用 ticket 调 `authserver.bigc.edu.cn/authserver/serviceValidate?service=...&ticket=...`
-- 判定: 解析返回 XML 的 `cas:containerId`, 含 `bzks`(本科生 OU)即视为学生
+### 身份判定(两种模式共用)
+
+- 用 ticket 调 `authserver.bigc.edu.cn/authserver/serviceValidate?service=...&ticket=...`
+- 解析返回 XML 的 `cas:containerId`, 含 `bzks`(本科生 OU)即视为学生
   - 实测学生账号: `ou=bzks,ou=People`, `cas:user=学号`, `cas:userName=姓名`
   - **白名单式判定**: 只放行明确命中的 OU, 其余拒绝(安全优先)
   - ⚠️ 教师账号的 containerId 尚未实测, 建议后续用工号确认其 OU 形态,
     确认后把教师 OU 不在白名单中即可(默认已满足)
+
+### password 模式(后端代登录, 已实测)
+
+1. GET 登录页取 `execution`、`pwdEncryptSalt`、**全部会话 cookie**
+   (⚠️ authserver 一次 Set 3 个 cookie: acw_tc/route/JSESSIONID,
+   `headers.get("Set-Cookie")` 只取第一个, 必须用 `getSetCookie()` 全取,
+   execution 绑定 session, 缺 cookie 必失败)
+2. AES-128-CBC 加密密码: 明文 = 64位随机字符 + 密码(字符集与学校前端 encrypt.js 一致),
+   Key = salt, IV = 16位随机字符, PKCS7 padding(WebCrypto 默认)
+3. POST 登录(带 session cookie, service 用 ehall 已注册地址, 302 提取 ticket)
+4. 用 ticket 调 serviceValidate 取身份(如上)
+5. 限流: 同 IP 5 分钟内最多 5 次尝试(`login_attempts` 表, 不含任何密码信息)
+6. 密码明文只存在于请求内存, 函数返回后即被丢弃, 不落盘不存储
 
 ## 本地开发
 
@@ -75,10 +95,16 @@ wrangler deploy
 
 ### 7. 测试
 
-1. 浏览器打开 Worker 域名 → 应自动跳转到学校统一认证登录页
-2. 用学号密码登录 → 跳回课程列表 → 成功
-3. 退出登录(右上角)→ 再试 → 确认重新走认证
-4. (可选)借一个教师工号测试 → 应看到 403 无权访问页
+`LOGIN_MODE=password` 时:
+
+1. 浏览器打开 Worker 域名 → 未登录应 302 到 `/login` 登录表单
+2. 输入学号+密码 → 应 302 到课程列表, 右上角显示姓名 → 成功
+3. 错误密码 → 401 显示错误提示; 同一地址 5 分钟 5 次后 → 429 限流提示
+4. 退出登录(右上角)→ 再试 → 确认重新走登录
+5. (可选)借一个教师工号测试 → 应看到 403 无权访问页
+
+`LOGIN_MODE=cas` 时: 未登录应自动 302 到学校统一认证登录页, 登录后带
+ticket 回调验证, 其余同上。
 
 ### 8. (可选)绑定自定义域名
 
@@ -112,7 +138,18 @@ wrangler deploy
 
 ## 安全说明
 
-- 密码**不经过本服务**: 学号密码只提交给学校统一认证平台
+⚠️ **注意**: `password` 模式(后端代登录)下, 密码会经由本服务的后端转发给
+学校统一认证平台——这与 CAS 跳转模式(密码只在学校页面输入)不同, 属于
+**借用学生密码换取身份验证**的方案, 学生使用前必须知情。缓解措施:
+
+- 密码明文只存在于 Worker 单次请求的内存中, 不落盘、不存储、不打日志
+- 限流: 同 IP 5 分钟最多 5 次登录尝试, 防批量爆破
+- 密码在传输中使用学校登录页下发的 salt 做 AES 加密, 与学校前端加密算法一致
+- 建议在服务说明页明确告知学生: 密码仅用于本次身份验证
+- `cas` 模式(若学校注册应用)下密码完全不经本服务, 更安全, 优先选用
+
+其他:
+
 - 本服务只持有: ticket(一次性)、`serviceValidate` 返回的用户属性(学号/姓名/OU)
 - 会话 cookie: HttpOnly + Secure + SameSite=Lax, 存 D1(30 天有效)
 - 评价支持匿名提交(不显示姓名, 但数据库有记录, 仅系统维护者可见)

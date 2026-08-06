@@ -73,10 +73,26 @@ async function route(request, env, ctx) {
       return redirect("/login", url);
     }
 
-    // 课程列表
+    // 课程列表(搜索, 按课程名去重)
     if (path === "/" || path === "/courses") {
-      const courses = await db.listCourses(env);
-      return html(views.renderCourseList(courses, session));
+      const q = (url.searchParams.get("q") || "").trim();
+      const courses = await db.listCourses(env, q);
+      return html(views.renderCourseList(courses, session, q));
+    }
+
+    // 老师列表(搜索)
+    if (path === "/teachers") {
+      const q = (url.searchParams.get("q") || "").trim();
+      const teachers = await db.listTeachers(env, q);
+      return html(views.renderTeacherList(teachers, session, q));
+    }
+
+    // 老师详情(教的课程 + 全部评价)
+    const teacherMatch = path.match(/^\/teachers\/(\d+)$/);
+    if (teacherMatch) {
+      const teacher = await db.getTeacher(env, Number(teacherMatch[1]));
+      if (!teacher) return html(views.renderError("这位老师不存在"), 404);
+      return html(views.renderTeacherDetail(teacher, session));
     }
 
     // 添加课程表单
@@ -84,14 +100,22 @@ async function route(request, env, ctx) {
       return html(views.renderNewCourse(session));
     }
 
-    // 创建课程
+    // 创建课程(支持多位老师)
     if (path === "/courses" && request.method === "POST") {
       const form = await request.formData();
       const name = String(form.get("name") || "").trim();
-      const teacher = String(form.get("teacher") || "").trim();
+      const teachers = form.getAll("teachers").map((s) => String(s).trim()).filter(Boolean);
       const description = String(form.get("description") || "").trim();
-      if (!name || !teacher) return html(views.renderError("课程名称和教师不能为空", session), 400);
-      await db.createCourse(env, { name, teacher, description });
+      if (!name || teachers.length === 0) {
+        return html(views.renderError("课程名称和任课老师不能为空", session), 400);
+      }
+      const created = await db.createCourse(env, { name, teachers, description });
+      if (!created) {
+        return html(
+          views.renderError(`「${name}」这门课已经存在, 直接去查看/评价即可, 无需重复添加。`, session),
+          400
+        );
+      }
       return redirect("/courses", url);
     }
 
@@ -99,8 +123,10 @@ async function route(request, env, ctx) {
     const courseMatch = path.match(/^\/courses\/(\d+)$/);
     if (courseMatch) {
       const id = Number(courseMatch[1]);
+      const course = await db.getCourse(env, id);
+      if (!course) return html(views.renderError("课程不存在"), 404);
 
-      // 提交评价
+      // 提交评价(针对该课程某位老师)
       if (request.method === "POST") {
         // 简单 CSRF 防护: 校验来源
         const origin = request.headers.get("Origin") || "";
@@ -110,21 +136,32 @@ async function route(request, env, ctx) {
         const form = await request.formData();
         const rating = Math.min(5, Math.max(1, Number(form.get("rating") || 0)));
         const content = String(form.get("content") || "").trim();
+        let teacherId = Number(form.get("teacher_id") || 0);
+        // teacher_id 必须是这门课的老师, 否则回退到第一位老师
+        if (!course.teachers.some((t) => t.id === teacherId)) {
+          teacherId = course.teachers[0]?.id || 0;
+        }
         if (!content) return html(views.renderError("评价内容不能为空"), 400);
-        await db.createReview(env, id, {
+        if (!teacherId) return html(views.renderError("这门课还没有老师, 无法提交评价"), 400);
+        await db.createReview(env, id, teacherId, {
           rating,
           content,
           user: session.userId,
           userName: session.userName,
           isAnonymous: form.get("anonymous") === "1",
         });
-        return redirect(`/courses/${id}`, url);
+        return redirect(`/courses/${id}?teacher=${teacherId}`, url);
       }
 
-      // 查看详情
-      const course = await db.getCourse(env, id);
-      if (!course) return html(views.renderError("课程不存在"), 404);
-      return html(views.renderCourseDetail(course, session));
+      // 查看详情: 选中的老师(?teacher=), 默认第一位
+      let teacherId = Number(url.searchParams.get("teacher") || 0);
+      if (!course.teachers.some((t) => t.id === teacherId)) {
+        teacherId = course.teachers[0]?.id || 0;
+      }
+      if (!teacherId) return html(views.renderError("这门课还没有老师"), 404);
+      const teacher = await db.getCourseTeacher(env, id, teacherId);
+      if (!teacher) return html(views.renderError("课程或老师不存在"), 404);
+      return html(views.renderCourseDetail(course, teacher, session, teacherId));
     }
 
     return html(views.renderError("页面不存在"), 404);

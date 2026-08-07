@@ -158,6 +158,24 @@ async function route(request, env, ctx) {
       return redirect(`/courses/${teacherRemoveMatch[1]}`, url);
     }
 
+    // 修改老师姓名(仅维护者, 全站生效)
+    const teacherRenameMatch = path.match(/^\/courses\/(\d+)\/teachers\/(\d+)\/rename$/);
+    if (teacherRenameMatch && request.method === "POST") {
+      if (!isMaintainer(session, env)) return html(views.renderError("没有权限执行此操作"), 403);
+      if (!originOk(request, url)) return html(views.renderError("请求来源不合法"), 403);
+      const form = await request.formData();
+      const newName = String(form.get("new_name") || "").trim();
+      if (!newName) return html(views.renderError("新名字不能为空"), 400);
+      const result = await db.renameTeacher(env, Number(teacherRenameMatch[2]), newName);
+      if (result.conflict) {
+        return html(
+          views.renderError(`「${newName}」这个名字的老师已存在, 改名失败。`, session),
+          400
+        );
+      }
+      return redirect(`/courses/${teacherRenameMatch[1]}?teacher=${teacherRenameMatch[2]}`, url);
+    }
+
     // 课程详情 / 提交评价
     const courseMatch = path.match(/^\/courses\/(\d+)$/);
     if (courseMatch) {

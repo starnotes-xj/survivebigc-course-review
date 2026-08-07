@@ -185,6 +185,14 @@ input:-webkit-autofill:focus {
 .adm-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dotted var(--line-deep); }
 .adm-row:last-of-type { border-bottom: none; }
 .adm-row .btn { letter-spacing: 2px; padding: 4px 14px; font-size: 13px; }
+.adm-ops { display: flex; align-items: center; gap: 8px; }
+.adm-ops details { position: relative; }
+.adm-ops summary { cursor: pointer; font-size: 13px; color: var(--ink-dim); letter-spacing: 2px; padding: 3px 8px; border: 1px solid var(--line-deep); border-radius: 2px; list-style: none; }
+.adm-ops summary::-webkit-details-marker { display: none; }
+.adm-ops summary:hover { border-color: var(--red); color: var(--red); }
+.rename-form { position: absolute; right: 0; top: 30px; z-index: 5; background: var(--paper-card); border: 1.5px solid var(--red); padding: 10px 12px; width: 210px; box-shadow: 2px 3px 10px rgba(38,34,26,.18); }
+.rename-form input { margin-bottom: 8px; }
+.rename-form .btn { letter-spacing: 2px; padding: 3px 12px; font-size: 12.5px; }
 
 .checkrow { margin: 12px 0; font-size: 13.5px; color: var(--ink-dim); }
 .checkrow input { width: auto; margin-right: 6px; }
@@ -413,10 +421,20 @@ export function renderCourseDetail(course, teacher, session, activeTeacherId = 0
   ${course.teachers.map((t) => `
   <div class="adm-row">
     <span>${escapeHtml(t.name)}</span>
-    <form method="post" action="/courses/${course.id}/teachers/${t.id}/remove"
-          onsubmit="return confirm('确认从本课程移除该老师? 其在本课下的评价将一并删除!')">
-      <button class="btn danger" type="submit">移除</button>
-    </form>
+    <span class="adm-ops">
+      <details>
+        <summary>改 名</summary>
+        <form class="rename-form" method="post" action="/courses/${course.id}/teachers/${t.id}/rename">
+          <label class="f" style="font-size:12px">新姓名(全站生效)</label>
+          <input type="text" name="new_name" required value="${escapeHtml(t.name)}" style="font-size:13px;padding:6px">
+          <button class="btn" type="submit">保 存</button>
+        </form>
+      </details>
+      <form method="post" action="/courses/${course.id}/teachers/${t.id}/remove"
+            onsubmit="return confirm('确认从本课程移除该老师? 其在本课下的评价将一并删除!')">
+        <button class="btn danger" type="submit">移除</button>
+      </form>
+    </span>
   </div>`).join("")}
   <form method="post" action="/courses/${course.id}/delete"
         onsubmit="return confirm('确认删除整门课程? 所有老师的评价将一并删除, 不可恢复!')" style="margin-top:8px">

@@ -211,6 +211,18 @@ export async function removeCourseTeacher(env, courseId, teacherId) {
   ]);
 }
 
+/** 修改老师姓名(全站生效: 该老师教的所有课一起变); 重名返回 { conflict: true } */
+export async function renameTeacher(env, teacherId, newName) {
+  const tname = String(newName || "").trim();
+  if (!tname) return { conflict: true };
+  const dup = await env.DB.prepare(
+    "SELECT id FROM teachers WHERE name = ? AND id != ?"
+  ).bind(tname, teacherId).first();
+  if (dup) return { conflict: true };
+  await env.DB.prepare("UPDATE teachers SET name = ? WHERE id = ?").bind(tname, teacherId).run();
+  return { ok: true };
+}
+
 /** 给已有课程添加老师(老师不存在则自动创建) */
 export async function addCourseTeacher(env, courseId, name) {
   const tname = String(name || "").trim();

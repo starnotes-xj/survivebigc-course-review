@@ -338,7 +338,7 @@ export function renderLogin(error) {
     ${errBox}
     <form method="post" action="/login/password" id="loginForm">
       <label class="f">学号</label>
-      <input type="text" name="username" required placeholder="如: 245020219"
+      <input type="text" name="username" required placeholder="输入学号"
              autocomplete="username" autofocus>
       <label class="f">密码</label>
       <input type="password" name="password" required placeholder="统一认证密码"

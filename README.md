@@ -78,14 +78,25 @@ wrangler d1 execute course-review --file=seed.sql   # 可选, 示例课程
 
 ```bash
 wrangler deploy
-# 输出会给出你的 Worker 域名, 形如:
-# https://survivebigc-course-review.<你的子域>.workers.dev
+# Worker 会自动分配 workers.dev 子域名, 同时响应已绑定的自定义域名
+# 如果还没有绑定自定义域名, 先在 Cloudflare 控制台绑定再继续
 ```
 
-### 6. 回填域名并重新部署
+> **:warning: 校园网访问注意事项**
+>
+> 北印校园网默认 DNS 为 `dns.bigc.edu.cn (202.205.107.10)`。Cloudflare 官方的
+> `workers.dev` 域名虽然能被学校 DNS 解析,但其对应 IP 段(`108.160.x.x`)被学校
+> 防火墙拦截,校园网内不可达。因此**必须绑定自定义域名**(如 `eval.survival.bigcctf.cn`),
+> 自定义域名使用 Cloudflare Anycast IP(`104.21.27.64` / `172.67.141.196`),
+> 校园网内可达。
+>
+> 自定义域名的 DNS 记录新增后,可能需要数小时才能同步到学校递归 DNS,
+> 期间校园网内短暂无法访问属正常现象。
 
-把第 5 步得到的域名填进 `wrangler.toml` 的 `PUBLIC_BASE_URL`
-(注意是 `https://` 开头、不带末尾斜杠), 然后重新:
+### 6. 确认配置并重新部署
+
+确认 `wrangler.toml` 里的 `PUBLIC_BASE_URL` 已改成最终使用的域名
+(当前为 `https://eval.survival.bigcctf.cn`, 不带末尾斜杠):
 
 ```bash
 wrangler deploy
@@ -106,24 +117,30 @@ wrangler deploy
 `LOGIN_MODE=cas` 时: 未登录应自动 302 到学校统一认证登录页, 登录后带
 ticket 回调验证, 其余同上。
 
-### 8. (可选)绑定自定义域名
+### 8. (必需)绑定自定义域名
 
-想用 `eval.survival.bigcctf.cn` 这类域名:
+由于校园网防火墙封了 `workers.dev` IP 段,自定义域名是**必须的**。
+当前使用的域名: `eval.survival.bigcctf.cn`。
 
+配置步骤:
 1. Cloudflare 控制台 → 左侧 Workers & Pages → 你的 Worker → Settings → Domains & Routes
 2. Add → Custom Domain → 输入域名
 3. 域名 DNS 若在 Cloudflare 托管会自动配置; 否则按提示在 DNS 处加 CNAME
 
-绑定后把 `PUBLIC_BASE_URL` 改成新域名并重新 `wrangler deploy`。
+绑定后确认 `PUBLIC_BASE_URL` 指向该域名并重新 `wrangler deploy`。
 
 ## 在 SurviveBIGCManual 中添加入口
 
-在文档仓库的某个 markdown 页面(如 `05-校园生活/`)加:
+在文档仓库的 `docs/05-校园生活/课程评价.md` 中添加:
 
 ```markdown
-[课程评价体系](https://survivebigc-course-review.<你的子域>.workers.dev) —
-仅限在校学生登录查看, 评价内容不对教职工开放。
+[点击进入课程评价体系](https://eval.survival.bigcctf.cn)
 ```
+
+> **为什么不能用 workers.dev 域名?** 北印校园网防火墙封了 `workers.dev` 对应的
+> Cloudflare IP 段(`108.160.x.x`), 学生在校园网内无法通过 workers.dev 访问。
+> 自定义域名使用不同的 Cloudflare Anycast IP(`104.21.27.64` / `172.67.141.196`),
+> 校园网内可达。
 
 ## 换届交接(半小时可完成)
 

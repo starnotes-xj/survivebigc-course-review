@@ -18,6 +18,10 @@ LOGIN_MODE = "password"
 STUDENT_CONTAINER_PATTERNS = "bzks"
 # 登录会话有效期(秒,默认 30 天)
 SESSION_TTL = "2592000"
+# 维护者学号白名单(逗号分隔): 命中者登录后可见「维护者管理」面板, 可删除课程/移除老师
+# 留空 = 关闭维护者功能。此文件是公开仓库, 学号是敏感信息, 建议留空后:
+# 在 Cloudflare 控制台 Worker → Settings → Variables 里添加 MAINTAINER_USERS 变量(仅自己账号可见)
+MAINTAINER_USERS = ""
 
 [[d1_databases]]
 binding = "DB"

@@ -187,6 +187,30 @@ export async function createCourse(env, { name, teachers = [], description = "" 
   return { id: courseId };
 }
 
+/** 删除整门课程(连同其全部评价与老师关联) — 仅维护者调用 */
+export async function deleteCourse(env, courseId) {
+  return env.DB.batch([
+    env.DB.prepare("DELETE FROM reviews WHERE course_id = ?").bind(courseId),
+    env.DB.prepare("DELETE FROM course_teachers WHERE course_id = ?").bind(courseId),
+    env.DB.prepare("DELETE FROM courses WHERE id = ?").bind(courseId),
+  ]);
+}
+
+/** 从课程移除老师(连同本课下的评价); 若该老师不再教任何课, 连老师实体一并删除 */
+export async function removeCourseTeacher(env, courseId, teacherId) {
+  return env.DB.batch([
+    env.DB.prepare("DELETE FROM reviews WHERE course_id = ? AND teacher_id = ?").bind(courseId, teacherId),
+    env.DB.prepare("DELETE FROM course_teachers WHERE course_id = ? AND teacher_id = ?").bind(courseId, teacherId),
+    // 该老师已无任何任课 → 清理其残留评价和老师记录
+    env.DB.prepare(
+      "DELETE FROM reviews WHERE teacher_id = ? AND NOT EXISTS (SELECT 1 FROM course_teachers WHERE teacher_id = ?)"
+    ).bind(teacherId, teacherId),
+    env.DB.prepare(
+      "DELETE FROM teachers WHERE id = ? AND NOT EXISTS (SELECT 1 FROM course_teachers WHERE teacher_id = ?)"
+    ).bind(teacherId, teacherId),
+  ]);
+}
+
 /** 给已有课程添加老师(老师不存在则自动创建) */
 export async function addCourseTeacher(env, courseId, name) {
   const tname = String(name || "").trim();

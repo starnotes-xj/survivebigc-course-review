@@ -140,6 +140,24 @@ async function route(request, env, ctx) {
       return redirect(`/courses/${teacherAddMatch[1]}?teacher=${result.teacherId}`, url);
     }
 
+    // 删除课程(仅维护者)
+    const courseDeleteMatch = path.match(/^\/courses\/(\d+)\/delete$/);
+    if (courseDeleteMatch && request.method === "POST") {
+      if (!isMaintainer(session, env)) return html(views.renderError("没有权限执行此操作"), 403);
+      if (!originOk(request, url)) return html(views.renderError("请求来源不合法"), 403);
+      await db.deleteCourse(env, Number(courseDeleteMatch[1]));
+      return redirect("/courses", url);
+    }
+
+    // 从课程移除老师(仅维护者)
+    const teacherRemoveMatch = path.match(/^\/courses\/(\d+)\/teachers\/(\d+)\/remove$/);
+    if (teacherRemoveMatch && request.method === "POST") {
+      if (!isMaintainer(session, env)) return html(views.renderError("没有权限执行此操作"), 403);
+      if (!originOk(request, url)) return html(views.renderError("请求来源不合法"), 403);
+      await db.removeCourseTeacher(env, Number(teacherRemoveMatch[1]), Number(teacherRemoveMatch[2]));
+      return redirect(`/courses/${teacherRemoveMatch[1]}`, url);
+    }
+
     // 课程详情 / 提交评价
     const courseMatch = path.match(/^\/courses\/(\d+)$/);
     if (courseMatch) {
@@ -149,11 +167,7 @@ async function route(request, env, ctx) {
 
       // 提交评价(针对该课程某位老师)
       if (request.method === "POST") {
-        // 简单 CSRF 防护: 校验来源
-        const origin = request.headers.get("Origin") || "";
-        if (origin && !origin.includes(new URL(request.url).host)) {
-          return html(views.renderError("请求来源不合法"), 403);
-        }
+        if (!originOk(request, url)) return html(views.renderError("请求来源不合法"), 403);
         const form = await request.formData();
         const rating = Math.min(5, Math.max(1, Number(form.get("rating") || 0)));
         const content = String(form.get("content") || "").trim();
@@ -182,7 +196,7 @@ async function route(request, env, ctx) {
       if (!teacherId) return html(views.renderError("这门课还没有老师"), 404);
       const teacher = await db.getCourseTeacher(env, id, teacherId);
       if (!teacher) return html(views.renderError("课程或老师不存在"), 404);
-      return html(views.renderCourseDetail(course, teacher, session, teacherId));
+      return html(views.renderCourseDetail(course, teacher, session, teacherId, isMaintainer(session, env)));
     }
 
     return html(views.renderError("页面不存在"), 404);
@@ -261,6 +275,20 @@ async function handleCallback(request, url, env) {
     cookie(SESSION_COOKIE, token, expires, url.hostname)
   );
   return resp;
+}
+
+/** 维护者判定: session 学号在 MAINTAINER_USERS 白名单(逗号分隔)中 */
+function isMaintainer(session, env) {
+  if (!session) return false;
+  return (env.MAINTAINER_USERS || "")
+    .split(",").map((s) => s.trim()).filter(Boolean)
+    .includes(session.userId);
+}
+
+/** 简单 CSRF 防护: 校验 Origin(同源请求放行) */
+function originOk(request, url) {
+  const origin = request.headers.get("Origin") || "";
+  return !origin || origin.includes(new URL(request.url).host);
 }
 
 /** 重定向(手动构造 Response, 这样 headers 可变, 之后还能 Set-Cookie) */

@@ -179,6 +179,12 @@ input:-webkit-autofill:focus {
 .btn.ghost:hover { background: var(--red-soft); }
 .btn.ink { background: var(--ink); border-color: var(--ink); }
 .btn.ink:hover { background: #17130e; }
+.btn.danger { background: transparent; color: var(--red); border-color: var(--red); }
+.btn.danger:hover { background: var(--red); color: #fff; }
+.admin { border: 1.5px dashed var(--red); background: rgba(176,58,46,.04); padding: 14px 16px; }
+.adm-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dotted var(--line-deep); }
+.adm-row:last-of-type { border-bottom: none; }
+.adm-row .btn { letter-spacing: 2px; padding: 4px 14px; font-size: 13px; }
 
 .checkrow { margin: 12px 0; font-size: 13.5px; color: var(--ink-dim); }
 .checkrow input { width: auto; margin-right: 6px; }
@@ -377,7 +383,7 @@ ${items}
 }
 
 /** 课程详情: 老师切换 tab + 该老师评价 + 提交表单 */
-export function renderCourseDetail(course, teacher, session, activeTeacherId = 0) {
+export function renderCourseDetail(course, teacher, session, activeTeacherId = 0, isMaintainer = false) {
   const tabs = course.teachers.map((t) => {
     const on = t.id === teacher.teacher_id;
     const score = t.avg_rating ? `${t.avg_rating}` : "—";
@@ -398,6 +404,25 @@ export function renderCourseDetail(course, teacher, session, activeTeacherId = 0
   const teacherOpts = course.teachers.map((t) =>
     `<option value="${t.id}" ${t.id === teacher.teacher_id ? "selected" : ""}>${escapeHtml(t.name)}</option>`
   ).join("");
+
+  // 维护者专属: 移除老师 / 删除课程(普通学生不可见)
+  const adminPanel = isMaintainer ? `
+<h3 class="sec">维护者管理</h3>
+<div class="admin">
+  <p style="font-size:13px;color:var(--red);margin:0 0 6px">⚠ 删除操作不可恢复, 请谨慎。学生提交的评价会一并删除。</p>
+  ${course.teachers.map((t) => `
+  <div class="adm-row">
+    <span>${escapeHtml(t.name)}</span>
+    <form method="post" action="/courses/${course.id}/teachers/${t.id}/remove"
+          onsubmit="return confirm('确认从本课程移除该老师? 其在本课下的评价将一并删除!')">
+      <button class="btn danger" type="submit">移除</button>
+    </form>
+  </div>`).join("")}
+  <form method="post" action="/courses/${course.id}/delete"
+        onsubmit="return confirm('确认删除整门课程? 所有老师的评价将一并删除, 不可恢复!')" style="margin-top:8px">
+    <button class="btn danger" type="submit" style="width:100%;letter-spacing:6px">删 除 此 课 程</button>
+  </form>
+</div>` : "";
 
   const body = `
 <div class="card" style="--i:0">
@@ -435,7 +460,8 @@ ${reviews}
   <label class="checkrow"><input type="checkbox" name="anonymous" value="1" checked> 匿名提交(列表只显示「匿名」, 后台留档)</label>
   <button class="btn" type="submit">提 交</button>
   <a class="btn ghost" href="/courses" style="margin-left:10px">返 回</a>
-</form>`;
+</form>
+${adminPanel}`;
   return page(`课程详情 - ${course.name}`, body, session);
 }
 
